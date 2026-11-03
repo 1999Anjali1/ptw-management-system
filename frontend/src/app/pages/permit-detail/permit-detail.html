@@ -1,0 +1,304 @@
+@if (permit(); as p) {
+  <header class="page-header">
+    <div>
+      <a routerLink="/permits" class="back">‹ Permits</a>
+      <div class="title-line">
+        <h1><span class="mono">{{ p.permitNumber }}</span> {{ p.title }}</h1>
+        <app-status-badge [status]="p.status" />
+        @if (p.isOverdue) {
+          <span class="tag tag--danger">Overdue</span>
+        }
+      </div>
+      <p class="muted">
+        {{ typeLabels[p.type] }} · {{ p.location }}
+        @if (p.equipmentTag) {
+          · Tag <span class="mono">{{ p.equipmentTag }}</span>
+        }
+        · <span class="risk" [class]="'risk risk--' + p.riskLevel.toLowerCase()">{{ p.riskLevel }} risk</span>
+      </p>
+    </div>
+    @if (p.canEdit) {
+      <a [routerLink]="['/permits', p.id, 'edit']" class="btn btn--ghost">Edit draft</a>
+    }
+  </header>
+
+  <!-- Feedback -->
+  @if (message()) {
+    <div class="alert alert--success">{{ message() }}</div>
+  }
+  @if (errors().length) {
+    <div class="alert alert--danger">
+      <strong>Blocked by PTW rules:</strong>
+      <ul>
+        @for (e of errors(); track $index) {
+          <li>{{ e }}</li>
+        }
+      </ul>
+    </div>
+  }
+  @if (p.lastComment && (p.status === 'Rejected' || p.status === 'Suspended')) {
+    <div class="alert alert--warning"><strong>{{ p.status }}:</strong> {{ p.lastComment }}</div>
+  }
+
+  <!-- Workflow actions available to this user -->
+  @if (p.availableActions.length) {
+    <section class="card actions">
+      <div class="actions__buttons">
+        <span class="muted small">Your actions:</span>
+        @for (a of p.availableActions; track a) {
+          <button
+            class="btn"
+            [class.btn--primary]="actionConfig[a].style === 'primary'"
+            [class.btn--danger]="actionConfig[a].style === 'danger'"
+            [class.btn--ghost]="actionConfig[a].style === 'neutral'"
+            [disabled]="busy()"
+            (click)="startAction(a)"
+          >
+            {{ actionConfig[a].label }}
+          </button>
+        }
+      </div>
+
+      @if (pendingAction(); as a) {
+        <div class="actions__confirm">
+          <label class="field">
+            <span>{{ actionConfig[a].needsComment ? 'Reason (required)' : 'Comment (optional)' }}</span>
+            <textarea rows="2" [(ngModel)]="comment" placeholder="Add a remark for the audit trail"></textarea>
+          </label>
+          <div class="form-actions">
+            <button class="btn btn--ghost" (click)="pendingAction.set(null)">Back</button>
+            <button class="btn btn--primary" [disabled]="busy()" (click)="confirmAction()">
+              Confirm: {{ actionConfig[a].label }}
+            </button>
+          </div>
+        </div>
+      }
+    </section>
+  }
+
+  <!-- SIMOPS warning -->
+  @if (conflicts().length) {
+    <div class="alert alert--warning">
+      <strong>SIMOPS check:</strong> {{ conflicts().length }} other permit(s) in the same area overlap this time window.
+      <ul>
+        @for (c of conflicts(); track c.id) {
+          <li>
+            <a [routerLink]="['/permits', c.id]" class="mono">{{ c.permitNumber }}</a>
+            {{ typeLabels[c.type] }} - {{ c.title }} ({{ c.status }}, {{ c.plannedStart | date: 'dd MMM HH:mm' }}–{{
+              c.plannedEnd | date: 'HH:mm'
+            }})
+          </li>
+        }
+      </ul>
+    </div>
+  }
+
+  <div class="grid-2">
+    <!-- Left column: the permit itself -->
+    <div class="stack">
+      <section class="card">
+        <h2 class="card__title">Work details</h2>
+        <dl class="details">
+          <dt>Description</dt>
+          <dd class="pre">{{ p.workDescription }}</dd>
+          <dt>Validity</dt>
+          <dd>{{ p.plannedStart | date: 'dd MMM yyyy HH:mm' }} → {{ p.plannedEnd | date: 'dd MMM yyyy HH:mm' }}</dd>
+          <dt>Workers</dt>
+          <dd>{{ p.workersCount }}</dd>
+          <dt>Hazards</dt>
+          <dd class="pre">{{ p.hazards }}</dd>
+          <dt>Precautions</dt>
+          <dd class="pre">{{ p.precautions }}</dd>
+          <dt>PPE</dt>
+          <dd class="pre">{{ p.requiredPpe }}</dd>
+        </dl>
+      </section>
+
+      <section class="card">
+        <h2 class="card__title">Sign-offs</h2>
+        <ol class="signoffs">
+          <li [class.done]="p.submittedAt">
+            <strong>Requested</strong> {{ p.requestedBy }} <span class="muted">({{ p.company }})</span>
+            <div class="small muted">{{ p.submittedAt ? (p.submittedAt | date: 'dd MMM HH:mm') : 'Not submitted yet' }}</div>
+          </li>
+          <li [class.done]="p.approvedAt">
+            <strong>Area Authority approval</strong> {{ p.approvedBy ?? '-' }}
+            <div class="small muted">{{ p.approvedAt ? (p.approvedAt | date: 'dd MMM HH:mm') : 'Pending' }}</div>
+          </li>
+          <li [class.done]="p.issuedAt">
+            <strong>Issued</strong> {{ p.issuedBy ?? '-' }}
+            <div class="small muted">{{ p.issuedAt ? (p.issuedAt | date: 'dd MMM HH:mm') : 'Pending' }}</div>
+          </li>
+          <li [class.done]="p.closedAt">
+            <strong>Closed out</strong>
+            <div class="small muted">{{ p.closedAt ? (p.closedAt | date: 'dd MMM HH:mm') : 'Open' }}</div>
+          </li>
+        </ol>
+      </section>
+    </div>
+
+    <!-- Right column: safety records + audit -->
+    <div class="stack">
+      <!-- Gas tests -->
+      <section class="card">
+        <div class="card__title-row">
+          <h2 class="card__title">
+            Gas tests
+            @if (p.requiresGasTest) {
+              <span class="tag">Required before issue</span>
+            }
+          </h2>
+          @if (p.canRecordSafetyChecks) {
+            <button class="btn btn--ghost btn--sm" (click)="showGasForm.set(!showGasForm())">
+              {{ showGasForm() ? 'Close' : '+ Record test' }}
+            </button>
+          }
+        </div>
+
+        @if (showGasForm()) {
+          <form class="inline-form" [formGroup]="gasForm" (ngSubmit)="saveGasTest()">
+            <div class="row">
+              <label class="field"><span>O₂ %</span><input type="number" step="0.1" formControlName="oxygenPercent" /></label>
+              <label class="field"><span>LEL %</span><input type="number" step="0.1" formControlName="lelPercent" /></label>
+              <label class="field"><span>H₂S ppm</span><input type="number" step="0.1" formControlName="h2sPpm" /></label>
+              <label class="field"><span>CO ppm</span><input type="number" step="0.1" formControlName="coPpm" /></label>
+            </div>
+            <label class="field"><span>Remarks</span><input formControlName="remarks" placeholder="Test points, instrument no." /></label>
+            <p class="small muted">Limits: O₂ 19.5–23.5% · LEL 0% for hot work, &lt;10% otherwise · H₂S &lt;10 ppm · CO &lt;25 ppm</p>
+            <button class="btn btn--primary btn--sm" type="submit" [disabled]="busy() || gasForm.invalid">Save gas test</button>
+          </form>
+        }
+
+        @if (p.gasTests.length) {
+          <table class="table table--compact">
+            <thead>
+              <tr><th>Time</th><th>O₂</th><th>LEL</th><th>H₂S</th><th>CO</th><th>Result</th></tr>
+            </thead>
+            <tbody>
+              @for (g of p.gasTests; track g.id) {
+                <tr>
+                  <td>
+                    {{ g.testedAt | date: 'dd MMM HH:mm' }}
+                    <div class="small muted">{{ g.testedBy }}</div>
+                  </td>
+                  <td>{{ g.oxygenPercent }}%</td>
+                  <td>{{ g.lelPercent }}%</td>
+                  <td>{{ g.h2sPpm }}</td>
+                  <td>{{ g.coPpm }}</td>
+                  <td>
+                    <span class="tag" [class.tag--success]="g.isPassed" [class.tag--danger]="!g.isPassed">
+                      {{ g.isPassed ? 'PASS' : 'FAIL' }}
+                    </span>
+                    @for (f of g.failures; track $index) {
+                      <div class="small text-danger">{{ f }}</div>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        } @else {
+          <p class="muted small">No gas tests recorded.</p>
+        }
+      </section>
+
+      <!-- Isolations -->
+      <section class="card">
+        <div class="card__title-row">
+          <h2 class="card__title">
+            Isolations (LOTO)
+            @if (p.requiresIsolation) {
+              <span class="tag">Required before issue</span>
+            }
+            @if (openIsolations()) {
+              <span class="tag tag--warning">{{ openIsolations() }} applied</span>
+            }
+          </h2>
+          @if (p.canRecordSafetyChecks) {
+            <button class="btn btn--ghost btn--sm" (click)="showIsolationForm.set(!showIsolationForm())">
+              {{ showIsolationForm() ? 'Close' : '+ Apply isolation' }}
+            </button>
+          }
+        </div>
+
+        @if (showIsolationForm()) {
+          <form class="inline-form" [formGroup]="isolationForm" (ngSubmit)="saveIsolation()">
+            <div class="row">
+              <label class="field">
+                <span>Type</span>
+                <select formControlName="type">
+                  @for (t of isolationTypes; track t) {
+                    <option [value]="t">{{ t }}</option>
+                  }
+                </select>
+              </label>
+              <label class="field"><span>Isolation point</span><input formControlName="isolationPoint" placeholder="Breaker / valve tag" /></label>
+              <label class="field field--narrow"><span>Lock no.</span><input formControlName="lockNumber" /></label>
+            </div>
+            <label class="field"><span>Description</span><input formControlName="description" /></label>
+            <button class="btn btn--primary btn--sm" type="submit" [disabled]="busy()">Apply isolation</button>
+          </form>
+        }
+
+        @if (p.isolations.length) {
+          <table class="table table--compact">
+            <thead>
+              <tr><th>Point</th><th>Type</th><th>Lock</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody>
+              @for (i of p.isolations; track i.id) {
+                <tr [class.muted]="i.isRemoved">
+                  <td>
+                    {{ i.isolationPoint }}
+                    @if (i.description) {
+                      <div class="small muted">{{ i.description }}</div>
+                    }
+                  </td>
+                  <td>{{ i.type }}</td>
+                  <td class="mono">{{ i.lockNumber ?? '-' }}</td>
+                  <td class="small">
+                    @if (i.isRemoved) {
+                      Removed {{ i.removedAt | date: 'dd MMM HH:mm' }}<br />by {{ i.removedBy }}
+                    } @else {
+                      Applied {{ i.appliedAt | date: 'dd MMM HH:mm' }}<br />by {{ i.appliedBy }}
+                    }
+                  </td>
+                  <td>
+                    @if (!i.isRemoved && p.canRecordSafetyChecks && p.status !== 'Active') {
+                      <button class="btn btn--ghost btn--sm" [disabled]="busy()" (click)="removeIsolation(i.id)">Remove</button>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        } @else {
+          <p class="muted small">No isolations applied.</p>
+        }
+      </section>
+
+      <!-- Audit trail -->
+      <section class="card">
+        <h2 class="card__title">Audit trail</h2>
+        <ul class="timeline">
+          @for (h of p.history; track $index) {
+            <li>
+              <div class="timeline__head">
+                <strong>{{ h.action }}</strong>
+                <span class="small muted">{{ h.timestamp | date: 'dd MMM yyyy HH:mm' }}</span>
+              </div>
+              <div class="small">by {{ h.performedBy }}</div>
+              @if (h.comment) {
+                <div class="small muted">“{{ h.comment }}”</div>
+              }
+            </li>
+          }
+        </ul>
+      </section>
+    </div>
+  </div>
+} @else if (errors().length) {
+  <div class="alert alert--danger">{{ errors()[0] }}</div>
+} @else {
+  <p class="muted">Loading…</p>
+}

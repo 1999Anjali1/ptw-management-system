@@ -1,0 +1,103 @@
+<header class="page-header">
+  <div>
+    <h1>Permits</h1>
+    <p class="muted">{{ result()?.totalCount ?? 0 }} permit(s) found</p>
+  </div>
+  @if (auth.hasRole('Requester', 'Admin')) {
+    <a routerLink="/permits/new" class="btn btn--primary">+ Raise permit</a>
+  }
+</header>
+
+<section class="card filters">
+  <input
+    class="filters__search"
+    type="search"
+    placeholder="Search number, title, location, tag…"
+    [(ngModel)]="search"
+    (keyup.enter)="applyFilter({ search, page: 1 })"
+  />
+
+  <select [ngModel]="query().status" (ngModelChange)="applyFilter({ status: $event, page: 1 })">
+    <option value="">All statuses</option>
+    @for (s of statuses; track s) {
+      <option [value]="s">{{ statusLabels[s] }}</option>
+    }
+  </select>
+
+  <select [ngModel]="query().type" (ngModelChange)="applyFilter({ type: $event, page: 1 })">
+    <option value="">All types</option>
+    @for (t of types; track t) {
+      <option [value]="t">{{ typeLabels[t] }}</option>
+    }
+  </select>
+
+  <label class="checkbox">
+    <input type="checkbox" [ngModel]="query().mine" (ngModelChange)="applyFilter({ mine: $event, page: 1 })" />
+    Raised by me
+  </label>
+
+  <button class="btn btn--ghost" (click)="applyFilter({ search, page: 1 })">Search</button>
+</section>
+
+@if (error()) {
+  <div class="alert alert--danger">{{ error() }}</div>
+}
+
+<section class="card card--flush">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Permit no.</th>
+        <th>Title</th>
+        <th>Type</th>
+        <th>Location</th>
+        <th>Validity</th>
+        <th>Requested by</th>
+        <th>Risk</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (p of result()?.items ?? []; track p.id) {
+        <tr [routerLink]="['/permits', p.id]" class="table__row-link">
+          <td class="mono">{{ p.permitNumber }}</td>
+          <td>{{ p.title }}</td>
+          <td>{{ typeLabels[p.type] }}</td>
+          <td>{{ p.location }}</td>
+          <td class="small">
+            {{ p.plannedStart | date: 'dd MMM HH:mm' }} – {{ p.plannedEnd | date: 'HH:mm' }}
+            @if (p.isOverdue) {
+              <span class="tag tag--danger">Overdue</span>
+            }
+          </td>
+          <td>
+            {{ p.requestedBy }}
+            <div class="small muted">{{ p.company }}</div>
+          </td>
+          <td><span class="risk" [class]="'risk risk--' + p.riskLevel.toLowerCase()">{{ p.riskLevel }}</span></td>
+          <td><app-status-badge [status]="p.status" /></td>
+        </tr>
+      } @empty {
+        <tr>
+          <td colspan="8" class="empty">{{ loading() ? 'Loading…' : 'No permits match these filters.' }}</td>
+        </tr>
+      }
+    </tbody>
+  </table>
+
+  @if (totalPages() > 1) {
+    <div class="pager">
+      <button class="btn btn--ghost btn--sm" [disabled]="query().page <= 1" (click)="applyFilter({ page: query().page - 1 })">
+        ‹ Prev
+      </button>
+      <span>Page {{ query().page }} of {{ totalPages() }}</span>
+      <button
+        class="btn btn--ghost btn--sm"
+        [disabled]="query().page >= totalPages()"
+        (click)="applyFilter({ page: query().page + 1 })"
+      >
+        Next ›
+      </button>
+    </div>
+  }
+</section>

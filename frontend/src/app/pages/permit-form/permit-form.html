@@ -1,0 +1,115 @@
+<header class="page-header">
+  <div>
+    <a routerLink="/permits" class="back">‹ Permits</a>
+    <h1>{{ isEdit() ? 'Edit permit ' + (permitNumber() ?? '') : 'Raise new permit' }}</h1>
+    <p class="muted">The permit is saved as a Draft. Submit it for approval from the permit page.</p>
+  </div>
+</header>
+
+@if (errors().length) {
+  <div class="alert alert--danger">
+    @for (e of errors(); track $index) {
+      <div>{{ e }}</div>
+    }
+  </div>
+}
+
+<form [formGroup]="form" (ngSubmit)="save()" class="form-grid">
+  <section class="card">
+    <h2 class="card__title">1. Work details</h2>
+
+    <div class="row">
+      <label class="field">
+        <span>Permit type</span>
+        <select formControlName="type" (change)="applyTemplate()">
+          @for (t of types; track t) {
+            <option [value]="t">{{ typeLabels[t] }}</option>
+          }
+        </select>
+      </label>
+      <label class="field">
+        <span>Risk level</span>
+        <select formControlName="riskLevel">
+          @for (r of riskLevels; track r) {
+            <option [value]="r">{{ r }}</option>
+          }
+        </select>
+      </label>
+    </div>
+
+    <label class="field">
+      <span>Job title</span>
+      <input formControlName="title" placeholder="e.g. Welding on fire water line flange" />
+      @if (invalid('title')) {
+        <small class="field__error">Title is required (5–150 characters).</small>
+      }
+    </label>
+
+    <label class="field">
+      <span>Work description / method</span>
+      <textarea formControlName="workDescription" rows="4" placeholder="Scope of work, sequence, tools and equipment used"></textarea>
+      @if (invalid('workDescription')) {
+        <small class="field__error">Describe the work (at least 10 characters).</small>
+      }
+    </label>
+
+    <div class="row">
+      <label class="field">
+        <span>Location / area</span>
+        <input formControlName="location" placeholder="e.g. Train 4 - Compressor House" />
+        @if (invalid('location')) {
+          <small class="field__error">Location is required.</small>
+        }
+      </label>
+      <label class="field">
+        <span>Equipment tag (optional)</span>
+        <input formControlName="equipmentTag" placeholder="e.g. V-401" />
+      </label>
+      <label class="field field--narrow">
+        <span>Workers</span>
+        <input type="number" formControlName="workersCount" min="1" max="100" />
+      </label>
+    </div>
+
+    <div class="row">
+      <label class="field">
+        <span>Planned start</span>
+        <input type="datetime-local" formControlName="plannedStart" />
+      </label>
+      <label class="field">
+        <span>Planned end</span>
+        <input type="datetime-local" formControlName="plannedEnd" />
+      </label>
+    </div>
+    @if (form.errors?.['window']) {
+      <small class="field__error">{{ form.errors?.['window'] }}</small>
+    }
+  </section>
+
+  <section class="card">
+    <div class="card__title-row">
+      <h2 class="card__title">2. Hazards &amp; controls</h2>
+      <button type="button" class="btn btn--ghost btn--sm" (click)="applyTemplate()">Reset to standard text</button>
+    </div>
+
+    <label class="field">
+      <span>Hazards identified</span>
+      <textarea formControlName="hazards" rows="3"></textarea>
+    </label>
+    <label class="field">
+      <span>Precautions / control measures</span>
+      <textarea formControlName="precautions" rows="4"></textarea>
+    </label>
+    <label class="field">
+      <span>Required PPE</span>
+      <textarea formControlName="requiredPpe" rows="2"></textarea>
+    </label>
+
+    <div class="form-actions">
+      <a routerLink="/permits" class="btn btn--ghost">Cancel</a>
+      <button type="submit" class="btn btn--primary" [disabled]="saving()">
+        {{ saving() ? 'Saving…' : isEdit() ? 'Save changes' : 'Save as draft' }}
+      </button>
+    </div>
+  </section>
+</form>

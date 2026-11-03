@@ -1,0 +1,102 @@
+<header class="page-header">
+  <div>
+    <h1>Dashboard</h1>
+    <p class="muted">Welcome back, {{ auth.user()?.fullName }}</p>
+  </div>
+  @if (auth.hasRole('Requester', 'Admin')) {
+    <a routerLink="/permits/new" class="btn btn--primary">+ Raise permit</a>
+  }
+</header>
+
+@if (error()) {
+  <div class="alert alert--danger">{{ error() }}</div>
+}
+
+@if (summary(); as s) {
+  @if (focus(); as f) {
+    <div class="focus">
+      <span>{{ f.text }}</span>
+      @if (f.status) {
+        <a [routerLink]="['/permits']" [queryParams]="{ status: f.status }" class="btn btn--sm btn--primary">Open list</a>
+      } @else {
+        <a routerLink="/permits" [queryParams]="{ mine: true }" class="btn btn--sm btn--ghost">My permits</a>
+      }
+    </div>
+  }
+
+  <section class="kpis">
+    <a class="kpi kpi--active" routerLink="/permits" [queryParams]="{ status: 'Active' }">
+      <span class="kpi__value">{{ s.activePermits }}</span>
+      <span class="kpi__label">Active on site</span>
+    </a>
+    <a class="kpi kpi--pending" routerLink="/permits" [queryParams]="{ status: 'Submitted' }">
+      <span class="kpi__value">{{ s.pendingApproval }}</span>
+      <span class="kpi__label">Pending approval</span>
+    </a>
+    <a class="kpi kpi--ready" routerLink="/permits" [queryParams]="{ status: 'Approved' }">
+      <span class="kpi__value">{{ s.readyToIssue }}</span>
+      <span class="kpi__label">Ready to issue</span>
+    </a>
+    <a class="kpi kpi--suspended" routerLink="/permits" [queryParams]="{ status: 'Suspended' }">
+      <span class="kpi__value">{{ s.suspended }}</span>
+      <span class="kpi__label">Suspended</span>
+    </a>
+    <div class="kpi" [class.kpi--alert]="s.overdue > 0">
+      <span class="kpi__value">{{ s.overdue }}</span>
+      <span class="kpi__label">Overdue (past end time)</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__value">{{ s.openIsolations }}</span>
+      <span class="kpi__label">Isolations applied</span>
+    </div>
+  </section>
+
+  <div class="grid-2">
+    <section class="card">
+      <h2 class="card__title">Live work on site</h2>
+      @if (s.activeNow.length === 0) {
+        <p class="muted">No active permits right now.</p>
+      } @else {
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Permit</th>
+              <th>Location</th>
+              <th>Ends</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (p of s.activeNow; track p.id) {
+              <tr [routerLink]="['/permits', p.id]" class="table__row-link">
+                <td>
+                  <div class="mono">{{ p.permitNumber }}</div>
+                  <div class="small">{{ typeLabels[p.type] }} · {{ p.title }}</div>
+                </td>
+                <td>{{ p.location }}</td>
+                <td [class.text-danger]="p.isOverdue">{{ p.plannedEnd | date: 'dd MMM HH:mm' }}</td>
+                <td><app-status-badge [status]="p.status" /></td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    </section>
+
+    <section class="card">
+      <h2 class="card__title">Permits by type</h2>
+      <div class="bars">
+        @for (b of typeBars(); track b.type) {
+          <div class="bars__row">
+            <span class="bars__label">{{ b.label }}</span>
+            <span class="bars__track"><span class="bars__fill" [style.width.%]="b.width"></span></span>
+            <span class="bars__count">{{ b.count }}</span>
+          </div>
+        }
+      </div>
+      <p class="muted small">Total permits in system: {{ s.totalPermits }}</p>
+    </section>
+  </div>
+} @else if (!error()) {
+  <p class="muted">Loading…</p>
+}
